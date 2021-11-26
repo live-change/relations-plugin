@@ -1,86 +1,64 @@
 const App = require("@live-change/framework")
 const { PropertyDefinition, ViewDefinition, IndexDefinition, ActionDefinition, EventDefinition } = App
 
+const {
+  extractIdParts, extractIdentifiers, extractObjectData, defineProperties, defineIndex,
+  processModelsAnnotation
+} = require('./utils.js')
+const {generateId} = require("./utils");
 
-function defineProperties(parents, model, parentPropertyNames) {
-  for (let i = 0; i < parents.length; i++) {
-    model.properties[parentPropertyNames[i]] = new PropertyDefinition({
-      type: parents[i],
-      validation: ['nonEmpty']
-    })
-  }
-}
 
-function defineIndex(model, joinedParentsClassName, parentPropertyNames) {
-  model.indexes['by' + joinedParentsClassName] = new IndexDefinition({
-    property: parentPropertyNames
-  })
-}
-
-function defineView(joinedParentsPropertyName, modelName, service, config, modelRuntime, parents, parentPropertyNames) {
+function defineView(config, context) {
+  const { service, modelRuntime, otherPropertyNames, joinedOthersPropertyName, modelName, others, model } = context
   const viewProperties = {}
-  for (let i = 0; i < parents.length; i++) {
-    viewProperties[parentPropertyNames[i]] = new PropertyDefinition({
-      type: parents[i],
+  for (let i = 0; i < others.length; i++) {
+    viewProperties[otherPropertyNames[i]] = new PropertyDefinition({
+      type: others[i],
       validation: ['nonEmpty']
     })
   }
-  const viewName = joinedParentsPropertyName + 'Owned' + modelName
+  const viewName = joinedOthersPropertyName + 'Owned' + modelName
   service.views[viewName] = new ViewDefinition({
     name: viewName,
     properties: {
       ...viewProperties
     },
+    returns: {
+      type: model,
+    },
     access: config.readAccess,
     daoPath(properties, { client, context }) {
-      const idParts = extractIdParts(parentPropertyNames, properties)
+      const idParts = extractIdParts(otherPropertyNames, properties)
       const id = idParts.length > 1 ? idParts.map(p => JSON.stringify(p)).join(':') : idParts[0]
       const path = modelRuntime().path(id)
       console.log("PROPERTY ID", id ,"PATH", path, "OF", properties)
-      //return modelRuntime().indexObjectPath('by' + parents.join('And'), idParts)
+      //return modelRuntime().indexObjectPath('by' + others.join('And'), idParts)
       return path
     }
   })
 }
 
-function extractIdParts(parentPropertyNames, properties) {
-  const idParts = []
-  for (const propertyName of parentPropertyNames) {
-    idParts.push(properties[propertyName])
-  }
-  return idParts
-}
-
-function extractIdentifiers(parentPropertyNames, properties) {
-  const identifiers = {}
-  const idParts = []
-  for (const propertyName of parentPropertyNames) {
-    identifiers[propertyName] = properties[propertyName]
-    idParts.push(properties[propertyName])
-  }
-  identifiers.id = idParts.length > 1 ? idParts.map(p => JSON.stringify(p)).join(':') : idParts[0]
-  return identifiers
-}
-
-function extractObjectData(writeableProperties, properties, defaults) {
-  let updateObject = {}
-  for (const propertyName of writeableProperties) {
-    if (properties.hasOwnProperty(propertyName)) {
-      newObject[propertyName] = properties[propertyName]
-    }
-  }
-  return App.utils.mergeDeep({}, defaults, updateObject)
-}
-
-async function defineSetAction(joinedParentsPropertyName, modelName, service, parentPropertyNames, modelRuntime, joinedParentsClassName, model, config, writeableProperties, defaults, app) {
-  const eventName = joinedParentsPropertyName + 'Owned' + modelName + 'Set'
+async function defineSetEvent(config, context) {
+  const {
+    service, modelRuntime, joinedOthersPropertyName, modelName, otherPropertyNames
+  } = context
+  const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Set'
   service.events[eventName] = new EventDefinition({
     name: eventName,
     execute(properties) {
-      return modelRuntime().create({ ...properties.data, ...properties.identifiers })
+      const id = generateId(otherPropertyNames, properties.identifiers)
+      return modelRuntime().create({ ...properties.data, ...properties.identifiers, id })
     }
   })
-  const actionName = 'set' + joinedParentsClassName + 'Owned' + modelName
+}
+
+async function defineSetAction(config, context) {
+  const {
+    service, app, model,  defaults,
+    otherPropertyNames, joinedOthersPropertyName, modelName, writeableProperties, joinedOthersClassName
+  } = context
+  const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Set'
+  const actionName = 'set' + joinedOthersClassName + 'Owned' + modelName
   service.actions[actionName] = new ActionDefinition({
     name: actionName,
     properties: {
@@ -88,12 +66,12 @@ async function defineSetAction(joinedParentsPropertyName, modelName, service, pa
     },
     access: config.setAccess || config.writeAccess,
     skipValidation: true,
-    queuedBy: parentPropertyNames,
+    queuedBy: otherPropertyNames,
     waitForEvents: true,
     async execute(properties, {client, service}, emit) {
-      const identifiers = extractIdentifiers(parentPropertyNames, properties)
+      const identifiers = extractIdentifiers(otherPropertyNames, properties)
       const data = extractObjectData(writeableProperties, properties, defaults)
-      await App.validation.validate(data, validators, {source: action, action, service, app, client})
+      await App.validation.validate(data, validators, { source: action, action, service, app, client })
       emit({
         type: eventName,
         identifiers, data
@@ -104,15 +82,27 @@ async function defineSetAction(joinedParentsPropertyName, modelName, service, pa
   const validators = App.validation.getValidators(action, service, action)
 }
 
-async function defineUpdateAction(joinedParentsPropertyName, modelName, service, modelRuntime, joinedParentsClassName, model, config, parentPropertyNames, writeableProperties, app) {
-  const eventName = joinedParentsPropertyName + 'Owned' + modelName + 'Updated'
+async function defineUpdateEvent(config, context) {
+  const {
+    service, modelRuntime, joinedOthersPropertyName, modelName, otherPropertyNames
+  } = context
+  const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Updated'
   service.events[eventName] = new EventDefinition({
     name: eventName,
     execute(properties) {
-      return modelRuntime().update(properties.identifiers.id, {...properties.data, ...properties.identifiers})
+      const id = generateId(otherPropertyNames, properties.identifiers)
+      return modelRuntime().update(id, { ...properties.data, ...properties.identifiers })
     }
   })
-  const actionName = 'update' + joinedParentsClassName + 'Owned' + modelName
+}
+
+async function defineUpdateAction(config, context) {
+  const {
+    service, app, model, modelRuntime,
+    otherPropertyNames, joinedOthersPropertyName, modelName, writeableProperties, joinedOthersClassName
+  } = context
+  const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Updated'
+  const actionName = 'update' + joinedOthersClassName + 'Owned' + modelName
   service.actions[actionName] = new ActionDefinition({
     name: actionName,
     properties: {
@@ -120,14 +110,14 @@ async function defineUpdateAction(joinedParentsPropertyName, modelName, service,
     },
     access: config.updateAccess || config.writeAccess,
     skipValidation: true,
-    queuedBy: parentPropertyNames,
+    queuedBy: otherPropertyNames,
     waitForEvents: true,
     async execute(properties, {client, service}, emit) {
-      const identifiers = extractIdentifiers(parentPropertyNames, properties)
+      const identifiers = extractIdentifiers(otherPropertyNames, properties)
       const entity = await modelRuntime().get(identifiers.id)
       if (!entity) throw new Error('not_found')
       const data = extractObjectData(writeableProperties, properties, entity)
-      await App.validation.validate(data, validators, {source: action, action, service, app, client})
+      await App.validation.validate(data, validators, { source: action, action, service, app, client })
       emit({
         type: eventName,
         identifiers, data
@@ -138,22 +128,34 @@ async function defineUpdateAction(joinedParentsPropertyName, modelName, service,
   const validators = App.validation.getValidators(action, service, action)
 }
 
-async function defineResetAction(joinedParentsPropertyName, modelName, service, modelRuntime, joinedParentsClassName, config, parentPropertyNames) {
-  const eventName = joinedParentsPropertyName + 'Owned' + modelName + 'Reset'
+async function defineResetEvent(config, context) {
+  const {
+    service, modelRuntime, joinedOthersPropertyName, modelName, otherPropertyNames
+  } = context
+  const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Reset'
   service.events[eventName] = new EventDefinition({
     name: eventName,
     execute({identifiers}) {
-      return modelRuntime().delete(identifiers.id)
+      const id = generateId(otherPropertyNames, identifiers)
+      return modelRuntime().delete(id)
     }
   })
-  const actionName = 'reset' + joinedParentsClassName + 'Owned' + modelName
+}
+
+async function defineResetAction(config, context) {
+  const {
+    service, modelRuntime,
+    otherPropertyNames, joinedOthersPropertyName, modelName,  joinedOthersClassName
+  } = context
+  const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Reset'
+  const actionName = 'reset' + joinedOthersClassName + 'Owned' + modelName
   service.actions[actionName] = new ActionDefinition({
     name: actionName,
     access: config.resetAccess || config.writeAccess,
-    queuedBy: parentPropertyNames,
+    queuedBy: otherPropertyNames,
     waitForEvents: true,
     async execute(properties, {client, service}, emit) {
-      const identifiers = extractIdentifiers(parentPropertyNames, properties)
+      const identifiers = extractIdentifiers(otherPropertyNames, properties)
       const entity = await modelRuntime().get(identifiers.id)
       if (!entity) throw new Error('not_found')
       emit({
@@ -164,63 +166,34 @@ async function defineResetAction(joinedParentsPropertyName, modelName, service, 
   })
 }
 
+
+
 module.exports = function(service, app) {
-  if (!service) throw new Error("no service")
-  if (!app) throw new Error("no app")
+  processModelsAnnotation(service, app, 'propertyOf', (config, context) => {
 
-  for(let modelName in service.models) {
-    const model = service.models[modelName]
-
-    console.log("PO", modelName, model.propertyOf)
-
-    if(model.propertyOf) {
-      if(model.propertyOfProcessed) throw new Error("duplicated processing of propertyOf processor")
-      model.propertyOfProcessed = true
-      const originalModelProperties = { ...model.properties }
-      const modelProperties = Object.keys(model.properties)
-      const modelPropertyName = modelName.slice(0, 1).toLowerCase() + modelName.slice(1)
-      const defaults = App.utils.generateDefault(originalModelProperties)
-      function modelRuntime() {
-        return service._runtime.models[modelName]
-      }
-      if(!model.indexes) model.indexes = {}
-
-      let config = model.propertyOf // only single ownership is possible, but may be owned by objects set
-      if(typeof config == 'string' || Array.isArray(config)) config = { what: config }
-
-      console.log("MODEL " + modelName + " IS PROPERTY OF " + config.what)
-
-      const parents = (Array.isArray(config.what) ? config.what : [ config.what ])
-          .map(parent => parent.name ? parent.name : parent)
-
-      const writeableProperties = modelProperties || config.writableProperties
-      console.log("PPP", parents)
-      const parentPropertyNames = parents.map(parent => parent.slice(0, 1).toLowerCase() + parent.slice(1))
-      const joinedParentsPropertyName = parentPropertyNames[0] +
-          (parents.length > 1 ? ('And' + parents.slice(1).join('And')) : '')
-      const joinedParentsClassName = parents.join('And')
-
-      defineProperties(parents, model, parentPropertyNames)
-      defineIndex(model, joinedParentsClassName, parentPropertyNames)
-      if(config.readAccess) {
-        defineView(joinedParentsPropertyName, modelName, service, config, modelRuntime, parents, parentPropertyNames)
-      }
-      /// TODO: multiple views with limited fields
-
-      if(config.setAccess || config.writeAccess) {
-        defineSetAction(joinedParentsPropertyName, modelName, service, parentPropertyNames,
-            modelRuntime, joinedParentsClassName, model, config, writeableProperties, defaults, app)
-      }
-
-      if(config.updateAccess || config.writeAccess) {
-        defineUpdateAction(joinedParentsPropertyName, modelName, service, modelRuntime, joinedParentsClassName,
-            model, config, parentPropertyNames, writeableProperties, app)
-      }
-
-      if(config.resetAccess || config.writeAccess) {
-        defineResetAction(joinedParentsPropertyName, modelName, service, modelRuntime, joinedParentsClassName,
-            config, parentPropertyNames);
-      }
+    defineProperties(context.model, context.others, context.otherPropertyNames)
+    defineIndex(context.model, context.joinedOthersClassName, context.otherPropertyNames)
+    
+    
+    if(config.readAccess) {
+      defineView(config, context)
     }
-  }
+    /// TODO: multiple views with limited fields
+
+    defineSetEvent(config, context)
+    defineUpdateEvent(config, context)
+    defineResetEvent(config, context)
+
+    if(config.setAccess || config.writeAccess) {
+      defineSetAction(config, context)
+    }
+
+    if(config.updateAccess || config.writeAccess) {
+      defineUpdateAction(config, context)
+    }
+
+    if(config.resetAccess || config.writeAccess) {
+      defineResetAction(config, context);
+    }
+  })
 }
