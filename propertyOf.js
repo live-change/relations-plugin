@@ -114,7 +114,8 @@ async function defineUpdateAction(config, context) {
     waitForEvents: true,
     async execute(properties, {client, service}, emit) {
       const identifiers = extractIdentifiers(otherPropertyNames, properties)
-      const entity = await modelRuntime().get(identifiers.id)
+      const id = generateId(otherPropertyNames, properties)
+      const entity = await modelRuntime().get(id)
       if (!entity) throw new Error('not_found')
       const data = extractObjectData(writeableProperties, properties, entity)
       await App.validation.validate(data, validators, { source: action, action, service, app, client })
@@ -144,19 +145,26 @@ async function defineResetEvent(config, context) {
 
 async function defineResetAction(config, context) {
   const {
-    service, modelRuntime,
-    otherPropertyNames, joinedOthersPropertyName, modelName,  joinedOthersClassName
+    service, modelRuntime, modelPropertyName,
+    otherPropertyNames, joinedOthersPropertyName, modelName,  joinedOthersClassName, model
   } = context
   const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Reset'
   const actionName = 'reset' + joinedOthersClassName + 'Owned' + modelName
   service.actions[actionName] = new ActionDefinition({
     name: actionName,
+    properties: {
+      [modelPropertyName]: {
+        type: model,
+        validation: ['nonEmpty']
+      }
+    },
     access: config.resetAccess || config.writeAccess,
     queuedBy: otherPropertyNames,
     waitForEvents: true,
     async execute(properties, {client, service}, emit) {
       const identifiers = extractIdentifiers(otherPropertyNames, properties)
-      const entity = await modelRuntime().get(identifiers.id)
+      const id = generateId(otherPropertyNames, properties)
+      const entity = await modelRuntime().get(id)
       if (!entity) throw new Error('not_found')
       emit({
         type: eventName,
@@ -173,7 +181,6 @@ module.exports = function(service, app) {
 
     defineProperties(context.model, context.others, context.otherPropertyNames)
     defineIndex(context.model, context.joinedOthersClassName, context.otherPropertyNames)
-    
     
     if(config.readAccess) {
       defineView(config, context)
