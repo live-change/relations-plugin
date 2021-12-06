@@ -5,7 +5,7 @@ const {
   extractIdParts, extractIdentifiers, extractObjectData, defineProperties, defineIndex,
   processModelsAnnotation
 } = require('./utils.js')
-const {generateId} = require("./utils");
+const { generateId } = require("./utils");
 
 
 function defineView(config, context) {
@@ -31,8 +31,6 @@ function defineView(config, context) {
       const idParts = extractIdParts(otherPropertyNames, properties)
       const id = idParts.length > 1 ? idParts.map(p => JSON.stringify(p)).join(':') : idParts[0]
       const path = modelRuntime().path(id)
-      console.log("PROPERTY ID", id ,"PATH", path, "OF", properties)
-      //return modelRuntime().indexObjectPath('by' + others.join('And'), idParts)
       return path
     }
   })
