@@ -5,7 +5,6 @@ const {
   extractIdParts, extractRange, extractIdentifiers, extractObjectData, defineProperties, defineIndex,
   processModelsAnnotation
 } = require('./utils.js')
-const {generateId} = require("./utils");
 
 function defineView(config, context) {
   const { service, modelRuntime, otherPropertyNames, joinedOthersPropertyName, joinedOthersClassName,

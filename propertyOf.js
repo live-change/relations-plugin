@@ -3,13 +3,13 @@ const { PropertyDefinition, ViewDefinition, IndexDefinition, ActionDefinition, E
 
 const {
   extractIdParts, extractIdentifiers, extractObjectData, defineProperties, defineIndex,
-  processModelsAnnotation
+  processModelsAnnotation, generateId
 } = require('./utils.js')
-const { generateId } = require("./utils");
 
 
 function defineView(config, context) {
-  const { service, modelRuntime, otherPropertyNames, joinedOthersPropertyName, modelName, others, model } = context
+  const { service, modelRuntime, otherPropertyNames, joinedOthersPropertyName, joinedOthersClassName,
+     modelName, others, model } = context
   const viewProperties = {}
   for (let i = 0; i < others.length; i++) {
     viewProperties[otherPropertyNames[i]] = new PropertyDefinition({
@@ -17,7 +17,8 @@ function defineView(config, context) {
       validation: ['nonEmpty']
     })
   }
-  const viewName = joinedOthersPropertyName + 'Owned' + modelName
+  const viewName = config.name || ((config.prefix ? (prefix + joinedOthersClassName) : joinedOthersPropertyName) +
+    'Owned' + modelName + (config.suffix || ''))
   service.views[viewName] = new ViewDefinition({
     name: viewName,
     properties: {
@@ -26,11 +27,11 @@ function defineView(config, context) {
     returns: {
       type: model,
     },
-    access: config.readAccess,
+    access: config.access,
     daoPath(properties, { client, context }) {
       const idParts = extractIdParts(otherPropertyNames, properties)
       const id = idParts.length > 1 ? idParts.map(p => JSON.stringify(p)).join(':') : idParts[0]
-      const path = modelRuntime().path(id)
+      const path = config.fields ? modelRuntime().limitedPath(id, config.fields) : modelRuntime().path(id)
       return path
     }
   })
@@ -134,7 +135,7 @@ async function defineResetEvent(config, context) {
   const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Reset'
   service.events[eventName] = new EventDefinition({
     name: eventName,
-    execute({identifiers}) {
+    execute({ identifiers }) {
       const id = generateId(otherPropertyNames, identifiers)
       return modelRuntime().delete(id)
     }
@@ -144,7 +145,7 @@ async function defineResetEvent(config, context) {
 async function defineResetAction(config, context) {
   const {
     service, modelRuntime, modelPropertyName,
-    otherPropertyNames, joinedOthersPropertyName, modelName,  joinedOthersClassName, model
+    otherPropertyNames, joinedOthersPropertyName, modelName, joinedOthersClassName, model
   } = context
   const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Reset'
   const actionName = 'reset' + joinedOthersClassName + 'Owned' + modelName
@@ -179,11 +180,15 @@ module.exports = function(service, app) {
 
     defineProperties(context.model, context.others, context.otherPropertyNames)
     defineIndex(context.model, context.joinedOthersClassName, context.otherPropertyNames)
-    
+
     if(config.readAccess) {
-      defineView(config, context)
+      defineView({ ...config, access: config.readAccess }, context)
     }
-    /// TODO: multiple views with limited fields
+    if(config.views) {
+      for(const view of config.views) {
+        defineView({ ...config, ...view }, context)
+      }
+    }
 
     defineSetEvent(config, context)
     defineUpdateEvent(config, context)
