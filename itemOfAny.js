@@ -2,9 +2,13 @@ const App = require("@live-change/framework")
 const { PropertyDefinition, ViewDefinition, IndexDefinition, ActionDefinition, EventDefinition } = App
 
 const {
-  extractIdParts, extractRange, extractIdentifiers, extractObjectData, defineProperties, defineIndex,
-  processModelsAnnotation
+  extractRange, extractObjectData
 } = require('./utils.js')
+
+const {
+  extractTypeAndIdParts, extractIdentifiersWithTypes, defineAnyProperties, defineAnyIndex,
+  processModelsAnyAnnotation
+} = require('./utilsAny.js')
 
 function defineView(config, context) {
   const { service, modelRuntime, otherPropertyNames, joinedOthersPropertyName, joinedOthersClassName,
@@ -13,7 +17,11 @@ function defineView(config, context) {
   const viewProperties = {}
   for (let i = 0; i < others.length; i++) {
     viewProperties[otherPropertyNames[i]] = new PropertyDefinition({
-      type: others[i],
+      type: 'String',
+      validation: ['nonEmpty']
+    })
+    viewProperties[otherPropertyNames[i] + 'Type'] = new PropertyDefinition({
+      type: 'String',
       validation: ['nonEmpty']
     })
   }
@@ -32,9 +40,9 @@ function defineView(config, context) {
     },
     access: config.readAccess,
     daoPath(properties, { client, context }) {
-      const idParts = extractIdParts(otherPropertyNames, properties)
+      const typeAndIdParts = extractTypeAndIdParts(otherPropertyNames, properties)
       const range = extractRange(properties)
-      const path = modelRuntime().sortedIndexRangePath(indexName, idParts, range)
+      const path = modelRuntime().sortedIndexRangePath(indexName, typeAndIdParts, range)
       return path
     }
   })
@@ -64,7 +72,7 @@ function defineCreateAction(config, context) {
       const id = properties[modelPropertyName] || app.generateUid()
       const entity = await modelRuntime().get(id)
       if(entity) throw 'exists'
-      const identifiers = extractIdentifiers(otherPropertyNames, properties)
+      const identifiers = extractIdentifiersWithTypes(otherPropertyNames, properties)
       const data = extractObjectData(writeableProperties, properties, defaults)
       await App.validation.validate(data, validators, { source: action, action, service, app, client })
       emit({
@@ -98,12 +106,12 @@ function defineUpdateAction(config, context) {
       const id = properties[modelPropertyName]
       const entity = await modelRuntime().get(id)
       if(!entity) throw 'not_found'
-      const entityIdParts = extractIdParts(otherPropertyNames, entity)
-      const idParts = extractIdParts(otherPropertyNames, properties)
-      if(JSON.stringify(entityIdParts) != JSON.stringify(idParts)) {
+      const entityTypeAndIdParts = extractTypeAndIdParts(otherPropertyNames, entity)
+      const typeAndIdParts = extractTypeAndIdParts(otherPropertyNames, properties)
+      if(JSON.stringify(entityTypeAndIdParts) != JSON.stringify(typeAndIdParts)) {
         throw 'not_authorized'
       }
-      const identifiers = extractIdentifiers(otherPropertyNames, properties)
+      const identifiers = extractIdentifiersWithTypes(otherPropertyNames, properties)
       const data = extractObjectData(writeableProperties, properties, entity)
       await App.validation.validate(data, validators, { source: action, action, service, app, client })
       emit({
@@ -138,9 +146,9 @@ function defineDeleteAction(config, context) {
       const id = properties[modelPropertyName]
       const entity = await modelRuntime().get(id)
       if(!entity) throw new Error('not_found')
-      const entityIdParts = extractIdParts(otherPropertyNames, entity)
-      const idParts = extractIdParts(otherPropertyNames, properties)
-      if(JSON.stringify(entityIdParts) != JSON.stringify(idParts)) {
+      const entityTypeAndIdParts = extractTypeAndIdParts(otherPropertyNames, entity)
+      const typeAndIdParts = extractTypeAndIdParts(otherPropertyNames, properties)
+      if(JSON.stringify(entityTypeAndIdParts) != JSON.stringify(typeAndIdParts)) {
         throw new Error('not_authorized')
       }
       emit({
@@ -157,15 +165,15 @@ function defineSortIndex(context, sortFields) {
   const sortFieldsUc = sortFields.map(fd=>fd.slice(0, 1).toUpperCase() + fd.slice(1))
   const indexName = 'by' + context.joinedOthersClassName + sortFieldsUc.join('')
   context.model.indexes[indexName] = new IndexDefinition({
-    property: [...context.otherPropertyNames, ...sortFields]
+    property: [...(context.otherPropertyNames.map(prop => [prop + 'Type', prop])), ...sortFields]
   })
 }
 
 module.exports = function(service, app) {
-  processModelsAnnotation(service, app, 'itemOf', (config, context) => {
+  processModelsAnyAnnotation(service, app, 'itemOfAny', (config, context) => {
 
-    defineProperties(context.model, context.others, context.otherPropertyNames)
-    defineIndex(context.model, context.joinedOthersClassName, context.otherPropertyNames)
+    defineAnyProperties(context.model, context.otherPropertyNames)
+    defineAnyIndex(context.model, context.joinedOthersClassName, context.otherPropertyNames)
 
     if(config.sortBy) {
       for(const sortFields of config.sortBy) {

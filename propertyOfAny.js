@@ -2,9 +2,13 @@ const App = require("@live-change/framework")
 const { PropertyDefinition, ViewDefinition, IndexDefinition, ActionDefinition, EventDefinition } = App
 
 const {
-  extractIdParts, extractIdentifiers, extractObjectData, defineProperties, defineIndex,
-  processModelsAnnotation, generateId
+  extractObjectData
 } = require('./utils.js')
+
+const {
+  extractTypeAndIdParts, extractIdentifiersWithTypes, defineAnyProperties, defineAnyIndex,
+  processModelsAnyAnnotation, generateAnyId
+} = require('./utilsAny.js')
 
 
 function defineView(config, context) {
@@ -14,6 +18,10 @@ function defineView(config, context) {
   for (let i = 0; i < others.length; i++) {
     viewProperties[otherPropertyNames[i]] = new PropertyDefinition({
       type: others[i],
+      validation: ['nonEmpty']
+    })
+    viewProperties[otherPropertyNames[i] + 'Type'] = new PropertyDefinition({
+      type: 'String',
       validation: ['nonEmpty']
     })
   }
@@ -29,15 +37,15 @@ function defineView(config, context) {
     },
     access: config.access,
     daoPath(properties, { client, context }) {
-      const idParts = extractIdParts(otherPropertyNames, properties)
-      const id = idParts.length > 1 ? idParts.map(p => JSON.stringify(p)).join(':') : idParts[0]
+      const typeAndIdParts = extractTypeAndIdParts(otherPropertyNames, properties)
+      const id = typeAndIdParts.length > 1 ? typeAndIdParts.map(p => JSON.stringify(p)).join(':') : idParts[0]
       const path = config.fields ? modelRuntime().limitedPath(id, config.fields) : modelRuntime().path(id)
       return path
     }
   })
 }
 
-const  { defineSetEvent, defineUpdateEvent, defineResetEvent } = require('./propertyEvents.js')
+const { defineSetEvent, defineUpdateEvent, defineResetEvent } = require('./propertyEvents.js')
 
 function defineSetAction(config, context) {
   const {
@@ -56,7 +64,7 @@ function defineSetAction(config, context) {
     queuedBy: otherPropertyNames,
     waitForEvents: true,
     async execute(properties, {client, service}, emit) {
-      const identifiers = extractIdentifiers(otherPropertyNames, properties)
+      const identifiers = extractIdentifiersWithTypes(otherPropertyNames, properties)
       const data = extractObjectData(writeableProperties, properties, defaults)
       await App.validation.validate(data, validators, { source: action, action, service, app, client })
       emit({
@@ -86,8 +94,8 @@ function defineUpdateAction(config, context) {
     queuedBy: otherPropertyNames,
     waitForEvents: true,
     async execute(properties, {client, service}, emit) {
-      const identifiers = extractIdentifiers(otherPropertyNames, properties)
-      const id = generateId(otherPropertyNames, properties)
+      const identifiers = extractIdentifiersWithTypes(otherPropertyNames, properties)
+      const id = generateAnyId(otherPropertyNames, properties)
       const entity = await modelRuntime().get(id)
       if (!entity) throw new Error('not_found')
       const data = extractObjectData(writeableProperties, properties, entity)
@@ -121,8 +129,8 @@ function defineResetAction(config, context) {
     queuedBy: otherPropertyNames,
     waitForEvents: true,
     async execute(properties, {client, service}, emit) {
-      const identifiers = extractIdentifiers(otherPropertyNames, properties)
-      const id = generateId(otherPropertyNames, properties)
+      const identifiers = extractIdentifiersWithTypes(otherPropertyNames, properties)
+      const id = generateAnyId(otherPropertyNames, properties)
       const entity = await modelRuntime().get(id)
       if (!entity) throw new Error('not_found')
       emit({
@@ -136,10 +144,10 @@ function defineResetAction(config, context) {
 
 
 module.exports = function(service, app) {
-  processModelsAnnotation(service, app, 'propertyOf', (config, context) => {
+  processModelsAnyAnnotation(service, app, 'propertyOf', (config, context) => {
 
-    defineProperties(context.model, context.others, context.otherPropertyNames)
-    defineIndex(context.model, context.joinedOthersClassName, context.otherPropertyNames)
+    defineAnyProperties(context.model, context.otherPropertyNames)
+    defineAnyIndex(context.model, context.joinedOthersClassName, context.otherPropertyNames)
 
     if(config.readAccess) {
       defineView({ ...config, access: config.readAccess }, context)
