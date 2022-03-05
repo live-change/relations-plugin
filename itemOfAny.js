@@ -49,8 +49,9 @@ function defineView(config, context) {
 }
 
 const {
-  defineCreatedEvent, defineUpdatedEvent, defineDeletedEvent
+  defineCreatedEvent, defineUpdatedEvent, defineDeletedEvent, defineTransferredEvent,
 } = require('itemEvents.js')
+const {defineTransferEvent} = require("./itemEvents");
 
 function defineCreateAction(config, context) {
   const {
@@ -102,7 +103,7 @@ function defineUpdateAction(config, context) {
     skipValidation: true,
     //queuedBy: otherPropertyNames,
     waitForEvents: true,
-    async execute(properties, {client, service}, emit) {
+    async execute(properties, { client, service }, emit) {
       const id = properties[modelPropertyName]
       const entity = await modelRuntime().get(id)
       if(!entity) throw 'not_found'
@@ -142,7 +143,7 @@ function defineDeleteAction(config, context) {
     skipValidation: true,
     //queuedBy: otherPropertyNames,
     waitForEvents: true,
-    async execute(properties, {client, service}, emit) {
+    async execute(properties, { client, service }, emit) {
       const id = properties[modelPropertyName]
       const entity = await modelRuntime().get(id)
       if(!entity) throw new Error('not_found')
@@ -162,7 +163,7 @@ function defineDeleteAction(config, context) {
 function defineSortIndex(context, sortFields) {
   if(!Array.isArray(sortFields)) sortFields = [sortFields]
   console.log("DEFINE SORT INDEX", sortFields)
-  const sortFieldsUc = sortFields.map(fd=>fd.slice(0, 1).toUpperCase() + fd.slice(1))
+  const sortFieldsUc = sortFields.map(fd => fd.slice(0, 1).toUpperCase() + fd.slice(1))
   const indexName = 'by' + context.joinedOthersClassName + sortFieldsUc.join('')
   context.model.indexes[indexName] = new IndexDefinition({
     property: [...(context.otherPropertyNames.map(prop => [prop + 'Type', prop])), ...sortFields]
@@ -188,6 +189,7 @@ module.exports = function(service, app) {
 
     defineCreatedEvent(config, context)
     defineUpdatedEvent(config, context)
+    defineTransferredEvent(config, context)
     defineDeletedEvent(config, context)
 
     if(config.setAccess || config.writeAccess) {

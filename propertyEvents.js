@@ -1,6 +1,6 @@
-const { generateAnyId } = require("./utilsAny.js");
 
-function defineSetEvent(config, context) {
+
+function defineSetEvent(config, context, generateId) {
   const {
     service, modelRuntime, joinedOthersPropertyName, modelName, otherPropertyNames
   } = context
@@ -14,7 +14,7 @@ function defineSetEvent(config, context) {
   })
 }
 
-function defineUpdateEvent(config, context) {
+function defineUpdatedEvent(config, context, generateId) {
   const {
     service, modelRuntime, joinedOthersPropertyName, modelName, otherPropertyNames
   } = context
@@ -23,12 +23,34 @@ function defineUpdateEvent(config, context) {
     name: eventName,
     execute(properties) {
       const id = generateId(otherPropertyNames, properties.identifiers)
-      return modelRuntime().update(id, { ...properties.data, ...properties.identifiers })
+      return modelRuntime().update(id, { ...properties.data, /*...properties.identifiers*/ })
     }
   })
 }
 
-function defineResetEvent(config, context) {
+function defineTransferredEvent(config, context, generateId) {
+  const {
+    service, modelRuntime, joinedOthersPropertyName, modelName, otherPropertyNames
+  } = context
+  const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Transferred'
+  service.events[eventName] = new EventDefinition({
+    name: eventName,
+    async execute(properties) {
+      const fromId = generateId(otherPropertyNames, properties.from)
+      const toId = generateId(otherPropertyNames, properties.to)
+      const data = await modelRuntime().get(fromId)
+      await modelRuntime().create({
+        ...data,
+        ...properties.to,
+        id: toId
+      })
+      await modelRunntime().delete(fromId)
+      return toId
+    }
+  })
+}
+
+function defineResetEvent(config, context, generateId) {
   const {
     service, modelRuntime, joinedOthersPropertyName, modelName, otherPropertyNames
   } = context
@@ -42,4 +64,4 @@ function defineResetEvent(config, context) {
   })
 }
 
-module.exports = { defineSetEvent, defineUpdateEvent, defineResetEvent }
+module.exports = { defineSetEvent, defineUpdatedEvent, defineTransferredEvent, defineResetEvent }

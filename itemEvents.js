@@ -27,6 +27,19 @@ function defineUpdatedEvent(config, context) {
   })
 }
 
+function defineTransferredEvent(config, context) {
+  const {
+    service, modelRuntime, joinedOthersPropertyName, modelName, modelPropertyName
+  } = context
+  const eventName = joinedOthersPropertyName + 'Owned' + modelName + 'Transferred'
+  service.events[eventName] = new EventDefinition({
+    name: eventName,
+    execute(properties) {
+      const id = properties[modelPropertyName]
+      return modelRuntime().update(id, { ...properties.to, id })
+    }
+  })
+}
 
 function defineDeletedEvent(config, context) {
   const {
@@ -42,4 +55,4 @@ function defineDeletedEvent(config, context) {
   })
 }
 
-module.exports = { defineCreatedEvent, defineUpdatedEvent, defineDeletedEvent }
+module.exports = { defineCreatedEvent, defineUpdatedEvent, defineTransferredEvent, defineDeletedEvent }

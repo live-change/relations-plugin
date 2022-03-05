@@ -37,7 +37,7 @@ function defineView(config, context) {
   })
 }
 
-const  { defineSetEvent, defineUpdateEvent, defineResetEvent } = require('./propertyEvents.js')
+const  { defineSetEvent, defineUpdatedEvent, defineTransferredEvent, defineResetEvent } = require('./propertyEvents.js')
 
 function defineSetAction(config, context) {
   const {
@@ -150,9 +150,10 @@ module.exports = function(service, app) {
       }
     }
 
-    defineSetEvent(config, context)
-    defineUpdateEvent(config, context)
-    defineResetEvent(config, context)
+    defineSetEvent(config, context, generateId)
+    defineUpdateEvent(config, context, generateId)
+    defineTransferEvent(config, context, generateId)
+    defineResetEvent(config, context, generateId)
 
     if(config.setAccess || config.writeAccess) {
       defineSetAction(config, context)

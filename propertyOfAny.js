@@ -2,7 +2,7 @@ const App = require("@live-change/framework")
 const { PropertyDefinition, ViewDefinition, IndexDefinition, ActionDefinition, EventDefinition } = App
 
 const {
-  extractObjectData
+  extractObjectData, generateId
 } = require('./utils.js')
 
 const {
@@ -45,7 +45,7 @@ function defineView(config, context) {
   })
 }
 
-const { defineSetEvent, defineUpdateEvent, defineResetEvent } = require('./propertyEvents.js')
+const { defineSetEvent, defineUpdatedEvent, defineTransferredEvent, defineResetEvent } = require('./propertyEvents.js')
 
 function defineSetAction(config, context) {
   const {
@@ -158,9 +158,10 @@ module.exports = function(service, app) {
       }
     }
 
-    defineSetEvent(config, context)
-    defineUpdateEvent(config, context)
-    defineResetEvent(config, context)
+    defineSetEvent(config, context, generateAnyId)
+    defineUpdatedEvent(config, context, generateAnyId)
+    defineTransferedEvent(config, context, generateId)
+    defineResetEvent(config, context, generateAnyId)
 
     if(config.setAccess || config.writeAccess) {
       defineSetAction(config, context)

@@ -41,8 +41,9 @@ function defineView(config, context) {
 }
 
 const {
-  defineCreatedEvent, defineUpdatedEvent, defineDeletedEvent
+  defineCreatedEvent, defineUpdatedEvent, defineDeletedEvent, defineTransferredEvent,
 } = require('itemEvents.js')
+const {defineTransferEvent} = require("./itemEvents");
 
 function defineCreateAction(config, context) {
   const {
@@ -180,6 +181,7 @@ module.exports = function(service, app) {
 
     defineCreatedEvent(config, context)
     defineUpdatedEvent(config, context)
+    defineTransferredEvent(config, context)
     defineDeletedEvent(config, context)
 
     if(config.setAccess || config.writeAccess) {
