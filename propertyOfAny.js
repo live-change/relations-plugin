@@ -2,7 +2,7 @@ const App = require("@live-change/framework")
 const { PropertyDefinition, ViewDefinition, IndexDefinition, ActionDefinition, EventDefinition } = App
 
 const {
-  extractObjectData, generateId
+  extractObjectData
 } = require('./utils.js')
 
 const {
@@ -160,7 +160,7 @@ module.exports = function(service, app) {
 
     defineSetEvent(config, context, generateAnyId)
     defineUpdatedEvent(config, context, generateAnyId)
-    defineTransferedEvent(config, context, generateId)
+    defineTransferredEvent(config, context, generateAnyId)
     defineResetEvent(config, context, generateAnyId)
 
     if(config.setAccess || config.writeAccess) {
