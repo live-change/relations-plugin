@@ -1,3 +1,5 @@
+const App = require("@live-change/framework")
+const { PropertyDefinition, ViewDefinition, IndexDefinition, ActionDefinition, EventDefinition } = App
 
 function defineCreatedEvent(config, context) {
   const {
